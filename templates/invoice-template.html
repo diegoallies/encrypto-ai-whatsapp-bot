@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Invoice {{INVOICE_NO}}</title>
+    <style>
+        @page { size: A4; margin: 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #fff; color: #1a1a2e; padding: 10mm 14mm; width: 210mm; margin: 0 auto; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+        .logo { display: flex; align-items: center; gap: 11px; }
+        .logo-icon { width: 44px; height: 44px; background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+        .logo-icon svg { width: 25px; height: 25px; fill: white; }
+        .logo-text h1 { font-size: 22px; font-weight: 700; color: #1e3a5f; }
+        .logo-text span { font-size: 9px; letter-spacing: 3px; color: #6b7280; text-transform: uppercase; }
+        .dates { text-align: right; font-size: 12px; }
+        .dates div { margin-bottom: 3px; }
+        .dates label { color: #6b7280; text-transform: uppercase; font-size: 9px; letter-spacing: 1px; }
+        .dates span { display: block; font-weight: 600; color: #1a1a2e; }
+        .rule { height: 2px; background: #1e3a5f; margin-bottom: 10px; }
+        .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 12px; }
+        .party { background: #f8fafc; padding: 14px; border-radius: 8px; border: 1px solid #eef2f7; }
+        .party label { font-size: 9px; letter-spacing: 2px; color: #6b7280; text-transform: uppercase; display: block; margin-bottom: 6px; }
+        .party h3 { font-size: 14px; font-weight: 700; color: #1e3a5f; margin-bottom: 4px; }
+        .party p { font-size: 11.5px; color: #4b5563; line-height: 1.5; }
+        .invoice-table { width: 100%; margin-bottom: 14px; border-collapse: collapse; }
+        .invoice-table th { background: #1e3a5f; color: white; padding: 9px 14px; text-align: left; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+        .invoice-table th:nth-child(2), .invoice-table th:nth-child(3), .invoice-table th:nth-child(4) { text-align: right; }
+        .invoice-table td { padding: 10px 14px; border-bottom: 1px solid #e5e7eb; font-size: 13px; vertical-align: top; }
+        .invoice-table td:nth-child(2), .invoice-table td:nth-child(3), .invoice-table td:nth-child(4) { text-align: right; white-space: nowrap; }
+        .invoice-table .desc-title { font-weight: 600; color: #1a1a2e; }
+        .invoice-table .desc-detail { font-size: 11px; color: #6b7280; margin-top: 3px; line-height: 1.45; max-width: 380px; }
+        .totals { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+        .totals-box { width: 290px; }
+        .totals-row { display: flex; justify-content: space-between; padding: 7px 14px; font-size: 13px; background: #f8fafc; }
+        .totals-row.total { background: #eef1f6; border-top: 2px solid #1e3a5f; font-size: 17px; font-weight: 700; color: #1e3a5f; padding: 10px 14px; }
+        .breakdown { background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #eef2f7; margin-bottom: 12px; }
+        .breakdown h4 { font-size: 10px; letter-spacing: 2px; color: #6b7280; text-transform: uppercase; margin-bottom: 10px; }
+        .breakdown table { width: 100%; font-size: 12px; border-collapse: collapse; }
+        .breakdown th { text-align: left; padding: 5px 0; color: #6b7280; font-weight: 600; border-bottom: 1px solid #e5e7eb; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; }
+        .breakdown th:last-child { text-align: right; }
+        .breakdown td { padding: 5px 0; border-bottom: 1px solid #eef2f7; color: #334155; }
+        .breakdown td:last-child { text-align: right; font-weight: 600; color: #1a1a2e; }
+        .breakdown tr:last-child td { border-bottom: none; font-weight: 700; padding-top: 8px; }
+        .payment { background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #eef2f7; margin-bottom: 12px; }
+        .payment h4 { font-size: 10px; letter-spacing: 2px; color: #6b7280; text-transform: uppercase; margin-bottom: 10px; }
+        .payment table { width: 100%; font-size: 11.5px; border-collapse: collapse; }
+        .payment td { padding: 3px 0; }
+        .payment td.k { color: #6b7280; width: 18%; }
+        .payment td.v { color: #1a1a2e; font-weight: 600; width: 32%; }
+        .footer { font-size: 11px; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 12px; line-height: 1.55; }
+        .footer strong { color: #1e3a5f; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">
+            <div class="logo-icon">
+                <svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z"/></svg>
+            </div>
+            <div class="logo-text">
+                <h1>Guard Nexus</h1>
+                <span>Software Solutions</span>
+            </div>
+        </div>
+        <div class="dates">
+            <div><label>Issue Date</label><span>{{ISSUE_DATE}}</span></div>
+            <div><label>Due Date</label><span>{{DUE_DATE}}</span></div>
+            <div><label>Billing Period</label><span>{{BILLING_PERIOD}}</span></div>
+        </div>
+    </div>
+    <div class="rule"></div>
+
+    <div class="parties">
+        <div class="party">
+            <label>From</label>
+            <h3>Example Co (Pty) Ltd</h3>
+            <p>the owner<br>19 Durban Street, your city, 8301<br>you@example.com<br>Reg: 2026/365928/07</p>
+        </div>
+        <div class="party">
+            <label>Bill To</label>
+            <h3>a client (Pty) Ltd</h3>
+            <p>Jane Smith<br>13 Ambrosia Lane, Olympus, Pretoria, 0081<br>jane@example.com<br>Reg: 2023/593538/07</p>
+        </div>
+    </div>
+
+    <table class="invoice-table">
+        <thead><tr><th>Description</th><th>Hours</th><th>Rate</th><th>Amount</th></tr></thead>
+        <tbody>
+            <tr>
+                <td><div class="desc-title">Software Engineering Consulting Services</div>
+                    <div class="desc-detail">{{CONSULT_DESC}}</div></td>
+                <td>{{TOTAL_HOURS}}</td>
+                <td>R {{RATE}} / hr</td>
+                <td>R {{AMOUNT}}</td>
+            </tr>
+            {{EXTRA_ROWS}}
+        </tbody>
+    </table>
+
+    <div class="totals">
+        <div class="totals-box">
+            <div class="totals-row"><span>Subtotal</span><span>R {{SUBTOTAL}}</span></div>
+            <div class="totals-row total"><span>Total due</span><span>R {{TOTAL}}</span></div>
+        </div>
+    </div>
+
+    <div class="breakdown">
+        <h4>Timesheet Breakdown &mdash; {{BREAKDOWN_TITLE}}</h4>
+        <table>
+            <thead><tr><th>Period</th><th>Work</th><th>Hours</th></tr></thead>
+            <tbody>
+                {{BREAKDOWN_ROWS}}
+                <tr><td><strong>Total</strong></td><td></td><td><strong>{{TOTAL_HOURS}}</strong></td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="payment">
+        <h4>Payment Details</h4>
+        <table>
+            <tr><td class="k">Account name</td><td class="v">Example Co (Pty) Ltd</td><td class="k">Branch code</td><td class="v">210845</td></tr>
+            <tr><td class="k">Bank</td><td class="v">First National Bank (FNB)</td><td class="k">Account type</td><td class="v">Gold Business Account</td></tr>
+            <tr><td class="k">Account no</td><td class="v">63209252856</td><td class="k">Reference</td><td class="v">{{INVOICE_NO}}</td></tr>
+        </table>
+    </div>
+
+    <div class="footer">
+        Thank you for your business. Payment due by <strong>{{DUE_DATE}}</strong>; please use <strong>{{INVOICE_NO}}</strong> as your payment reference.<br>
+        Invoice issued by <strong>Example Co (Pty) Ltd</strong> for software engineering consulting services rendered to a client (Pty) Ltd.
+    </div>
+</body>
+</html>

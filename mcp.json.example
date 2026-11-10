@@ -1,0 +1,49 @@
+{
+  "_doc": "Rename to mcp.json (or set MCP_CONFIG=<path>) to enable. Each entry follows Claude Code's MCP server schema. Remove the servers you don't want — the bot loads ALL of them on startup.",
+
+  "_install": {
+    "filesystem": "no install — npx fetches @modelcontextprotocol/server-filesystem on first run",
+    "gmail":      "see https://github.com/GongRzhe/Gmail-MCP-Server  (npm i -g @gongrzhe/server-gmail-autoauth-mcp, then run once to OAuth)",
+    "gcalendar":  "see https://github.com/nspady/google-calendar-mcp  (clone + npm i + auth via Google Cloud OAuth)",
+    "github":     "needs a GitHub Personal Access Token with repo + read:user — set GITHUB_TOKEN below",
+    "spotify":    "see https://github.com/varunneal/spotify-mcp  (needs Spotify Developer client_id + client_secret)"
+  },
+
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/encrypto27"]
+    },
+
+    "_gmail_disabled": {
+      "command": "npx",
+      "args": ["-y", "@gongrzhe/server-gmail-autoauth-mcp"]
+    },
+
+    "_gcalendar_disabled": {
+      "command": "node",
+      "args": ["/home/encrypto27/code/google-calendar-mcp/build/index.js"],
+      "env": {
+        "GOOGLE_OAUTH_CREDENTIALS": "/home/encrypto27/.config/gcal-mcp/credentials.json"
+      }
+    },
+
+    "_github_disabled": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_REPLACE_ME"
+      }
+    },
+
+    "_spotify_disabled": {
+      "command": "uvx",
+      "args": ["spotify-mcp"],
+      "env": {
+        "SPOTIFY_CLIENT_ID": "REPLACE_ME",
+        "SPOTIFY_CLIENT_SECRET": "REPLACE_ME",
+        "SPOTIFY_REDIRECT_URI": "http://localhost:8888/callback"
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "name": "encrypto-ai-whatsapp-bot",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "check": "node --check src/index.js && node --check src/claude-agent.js && node --check src/allowlist.js && node --check src/queue.js && node --check src/chunk.js && node --check src/handler.js && node --check src/parse.js && node --check src/stats.js && node --check src/scheduler.js && node --check src/cron-time.js && node --check src/memory.js && node --check src/heartbeat.js && node --check src/log-buffer.js && node --check src/outbound-store.js && node --check src/logger.js && node --check src/env-store.js && node --check src/webui.js && node --check src/media.js && node --check src/commands.js && node --check src/builtin-commands.js && node --check src/reactions.js && node --check src/streaming.js && node --check src/poll.js && node --check src/cache.js && node --check src/stranger-notify.js && node --check src/reaction-commands.js && node --check src/group-mode.js && node --check src/contacts.js && node --check src/contact-onboard.js && node --check src/sessions-store.js && node --check src/journal.js && node --check src/coalescer.js && node --check src/reply-filter.js && node --check src/cost-guard.js && node --check src/playbooks.js && node --check src/playbook-runs.js && node --check src/playbook-pins.js && node --check src/playbook-schedules.js && node --check src/personas.js && node --check src/persona-meta.js && node --check src/persona-history.js && node --check src/persona-test.js && node --check src/chat-search.js && node --check src/video.js && node --check src/focus-mode.js && node --check src/no-reply.js && node --check src/url-unfurler.js && node --check src/integrations/budget.js && node --check scripts/yt-grab.mjs && node --check scripts/rmbg.mjs && node --check scripts/sticker.mjs && node --check src/integrations/wake-up.js && node --check src/integrations/git-backup.js && node --check src/integrations/piper.js && node --check src/integrations/crowdsec.js && node --check src/integrations/himalaya.js && node --check src/integrations/ntfy.js && node --check src/integrations/whisper.js && node --check src/integrations/auth-backup.js && node --check src/integrations/wacli-sync.js && node --check scripts/cron.mjs && node --check scripts/wa-send.mjs && node --check scripts/wa-send-file.mjs && node --check scripts/contact-add.mjs && node --check scripts/whois.mjs && node --check scripts/git-backup.mjs && node --check scripts/healthcheck.mjs && node --check scripts/restart.mjs",
+    "test": "node --test 'test/*.test.js'",
+    "setup": "node scripts/setup.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.280",
+    "@anthropic-ai/sdk": "^0.128.0",
+    "baileys": "^7.0.0-rc14",
+    "croner": "^9.0.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "multer": "^2.2.0",
+    "pdfkit": "^0.18.0",
+    "pg": "^8.21.0",
+    "pino": "^9.5.0",
+    "playwright": "^1.60.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer": "^25.0.4",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "sharp": "^0.35.4"
+  }
+}

@@ -1,0 +1,20 @@
+node_modules/
+auth_info_baileys/
+.env
+*.log
+logs/
+data/
+.DS_Store
+
+# Runtime memory state (keep seed MEMORY.md, ignore the rest).
+memory/
+!memory/.gitkeep
+
+# Backups created by ./encryptoai when overwriting soul/rules.
+*.orig
+auth_info_baileys.pre-*
+auth_info_baileys.logged-out-*
+.env.bak-*
+scripts/__pycache__/
+scripts/.venv/
+scripts/*.bak

@@ -1,0 +1,367 @@
+#!/usr/bin/env bash
+# encryptoai — one-script setup & control for your personal WhatsApp ↔ Claude bot.
+# Run with no args for an interactive menu, or use subcommands (see `./encryptoai help`).
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# ─── pretty output ────────────────────────────────────────────────────────────
+if [ -t 1 ] && command -v tput >/dev/null 2>&1 && [ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]; then
+  BOLD="$(tput bold)"; DIM="$(tput dim)"; RESET="$(tput sgr0)"
+  RED="$(tput setaf 1)"; GREEN="$(tput setaf 2)"; YELLOW="$(tput setaf 3)"; BLUE="$(tput setaf 4)"
+else
+  BOLD=""; DIM=""; RESET=""; RED=""; GREEN=""; YELLOW=""; BLUE=""
+fi
+
+log()  { printf '%s▸%s %s\n' "$BLUE"   "$RESET" "$*"; }
+ok()   { printf '%s✓%s %s\n' "$GREEN"  "$RESET" "$*"; }
+warn() { printf '%s!%s %s\n' "$YELLOW" "$RESET" "$*"; }
+err()  { printf '%s✗%s %s\n' "$RED"    "$RESET" "$*" >&2; }
+ask()  { printf '%s?%s %s ' "$BOLD" "$RESET" "$*"; read -r REPLY; }
+
+banner() {
+  cat <<EOF
+
+  ${BOLD}encryptoai${RESET}  ${DIM}— your personal WhatsApp ↔ Claude bot${RESET}
+
+EOF
+}
+
+# ─── checks ───────────────────────────────────────────────────────────────────
+have()         { command -v "$1" >/dev/null 2>&1; }
+node_major()   { node -v 2>/dev/null | sed 's/^v\([0-9]*\).*/\1/' || echo 0; }
+has_deps()     { [ -d node_modules ] && [ -f node_modules/.package-lock.json ]; }
+is_paired()   { [ -d auth_info_baileys ] && [ -n "$(ls -A auth_info_baileys 2>/dev/null || true)" ]; }
+has_env()      { [ -f .env ]; }
+
+allow_count() {
+  [ -f .env ] || { echo 0; return; }
+  local v
+  v=$(grep '^ALLOWED_JIDS=' .env 2>/dev/null | head -1 | sed 's/^ALLOWED_JIDS=//' | tr -d '"' | tr -d "'")
+  [ -z "$v" ] && { echo 0; return; }
+  echo "$v" | awk -F',' '{c=0; for(i=1;i<=NF;i++) if($i!="") c++; print c}'
+}
+
+claude_logged_in() {
+  have claude && [ -d "$HOME/.claude" ] && \
+    [ -n "$(find "$HOME/.claude" -maxdepth 2 -name '*.json' 2>/dev/null | head -1)" ]
+}
+
+pm2_running() { have pm2 && pm2 jlist 2>/dev/null | grep -q '"name":"whatsapp-claude-bot"'; }
+
+# ─── status ───────────────────────────────────────────────────────────────────
+print_status() {
+  banner
+  printf '  %sStatus%s\n' "$BOLD" "$RESET"
+  if have node; then
+    if [ "$(node_major)" -ge 20 ]; then ok "node $(node -v)"
+    else err "node $(node -v) — need 20+"
+    fi
+  else err "node not installed (https://nodejs.org)"; fi
+  if have claude && claude_logged_in; then ok "claude code logged in"
+  elif have claude; then warn "claude code installed but not logged in"
+  else warn "claude code CLI not found"
+  fi
+  if has_deps; then ok "npm dependencies installed"; else warn "npm dependencies missing"; fi
+  if has_env; then ok ".env present"; else warn ".env missing"; fi
+  local n; n=$(allow_count)
+  if [ "$n" -gt 0 ]; then ok "allowlist: $n JID(s)"
+  else warn "allowlist: empty (bot will refuse everyone)"; fi
+  if is_paired; then ok "WhatsApp paired"; else warn "WhatsApp NOT paired"; fi
+  if pm2_running; then ok "pm2: running"; else printf '  %spm2: not running%s\n' "$DIM" "$RESET"; fi
+  echo
+}
+
+# ─── actions ──────────────────────────────────────────────────────────────────
+do_install() {
+  if ! have node; then err "Install Node 20+ first: https://nodejs.org"; return 1; fi
+  if [ "$(node_major)" -lt 20 ]; then err "Node 20+ required (you have $(node -v))"; return 1; fi
+  log "Installing dependencies..."
+  npm install
+  ok "Dependencies installed"
+}
+
+do_env_setup() {
+  if [ ! -f .env ]; then
+    cp .env.example .env
+    ok "Created .env from .env.example"
+  fi
+}
+
+do_claude_login() {
+  if ! have claude; then
+    warn "claude CLI not found. Install Claude Code: https://docs.claude.com/claude-code"
+    return 1
+  fi
+  if claude_logged_in; then
+    ok "Already logged in to Claude Code."
+    ask "Re-login anyway? [y/N]"
+    [[ "$REPLY" =~ ^[Yy]$ ]] || return 0
+  fi
+  claude login
+}
+
+do_relink() {
+  do_env_setup
+  if pm2_running; then
+    log "Stopping pm2 process before re-link..."
+    pm2 stop whatsapp-claude-bot >/dev/null 2>&1 || true
+  fi
+  if is_paired; then
+    ask "Wipe existing WhatsApp pairing and start over? [y/N]"
+    if [[ "$REPLY" =~ ^[Yy]$ ]]; then
+      rm -rf auth_info_baileys
+      ok "Pairing data wiped."
+    else
+      log "Keeping existing pairing — nothing to do."
+      return 0
+    fi
+  fi
+  cat <<EOF
+
+  ${BOLD}Pairing instructions${RESET}
+    1. A QR code will appear below.
+    2. On your phone: WhatsApp → Settings → Linked Devices → Link a Device.
+    3. Scan the QR.
+    4. When you see "✓ WhatsApp connected", press ${BOLD}Ctrl+C${RESET} to return to the menu.
+
+EOF
+  ask "Press Enter to start..."
+  node src/index.js || true
+}
+
+# Spin up the bot with an empty allowlist so we can capture our JID
+# from the "Blocked:" log line, then auto-add it.
+do_find_jid() {
+  if ! is_paired; then warn "Pair WhatsApp first (option 3)."; return 1; fi
+
+  local backup=""
+  if [ "$(allow_count)" -gt 0 ]; then
+    backup=".env.encryptoai-bak.$$"
+    cp .env "$backup"
+    sed -i.bak 's/^ALLOWED_JIDS=.*/ALLOWED_JIDS=/' .env && rm -f .env.bak
+    log "Temporarily cleared allowlist (saved to $backup)"
+  fi
+
+  local logfile; logfile="$(mktemp -t encryptoai.XXXXXX)"
+  log "Starting bot in the background — send a WhatsApp message to your linked number now."
+  log "I'll auto-detect the JID and stop the bot. (Timeout: 3 minutes.)"
+
+  node src/index.js >"$logfile" 2>&1 &
+  local pid=$!
+
+  local jid="" elapsed=0
+  trap 'kill $pid 2>/dev/null || true; wait $pid 2>/dev/null || true' INT TERM
+  while [ $elapsed -lt 180 ]; do
+    if ! kill -0 "$pid" 2>/dev/null; then
+      err "Bot exited unexpectedly. Recent output:"
+      tail -n 20 "$logfile" || true
+      break
+    fi
+    if grep -qE 'Blocked: [^ ]+@s\.whatsapp\.net' "$logfile" 2>/dev/null; then
+      jid="$(grep -oE '[0-9]+@s\.whatsapp\.net' "$logfile" | head -1)"
+      break
+    fi
+    sleep 1; elapsed=$((elapsed + 1))
+    [ $((elapsed % 10)) -eq 0 ] && printf '.'
+  done
+  echo
+  trap - INT TERM
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+
+  if [ -n "$backup" ]; then mv "$backup" .env; ok "Restored original allowlist"; fi
+
+  if [ -n "$jid" ]; then
+    ok "Detected JID: ${BOLD}${jid}${RESET}"
+    ask "Add it to the allowlist? [Y/n]"
+    if [[ ! "${REPLY:-}" =~ ^[Nn]$ ]]; then add_jid "$jid"; fi
+  else
+    warn "Didn't detect a JID within 3 minutes."
+    log "Recent bot output:"; tail -n 15 "$logfile" || true
+    ask "Paste your JID manually (or leave blank to skip):"
+    [ -n "${REPLY:-}" ] && add_jid "$REPLY"
+  fi
+  rm -f "$logfile"
+}
+
+add_jid() {
+  local jid="$1"
+  [ -z "$jid" ] && return 1
+  do_env_setup
+  local current
+  current="$(grep '^ALLOWED_JIDS=' .env | head -1 | sed 's/^ALLOWED_JIDS=//' || true)"
+  local new
+  if [ -z "$current" ]; then new="$jid"
+  elif echo ",$current," | grep -q ",$jid,"; then
+    ok "$jid already in allowlist"; return 0
+  else new="${current},${jid}"
+  fi
+  sed -i.bak "s|^ALLOWED_JIDS=.*|ALLOWED_JIDS=${new}|" .env && rm -f .env.bak
+  ok "Added $jid to allowlist"
+}
+
+do_edit_env() { do_env_setup; "${EDITOR:-nano}" .env; }
+
+do_edit_soul() { "${EDITOR:-nano}" soul.md; }
+do_edit_rules() { "${EDITOR:-nano}" rules.md; }
+
+do_cron() {
+  if [ ! -f scripts/cron.mjs ]; then err "scripts/cron.mjs missing"; return 1; fi
+  if [ -f .env ]; then set -a; . ./.env; set +a; fi
+  node scripts/cron.mjs "$@"
+}
+
+do_start_fg() {
+  do_env_setup
+  if pm2_running; then warn "Already running under pm2 — stop it first (option 8) before running in foreground."; return 1; fi
+  log "Starting bot in foreground. Ctrl+C to stop."
+  node src/index.js
+}
+
+do_start_daemon() {
+  do_env_setup
+  if ! have pm2; then
+    warn "pm2 not installed."
+    ask "Install pm2 globally now (npm install -g pm2)? [Y/n]"
+    if [[ ! "${REPLY:-}" =~ ^[Nn]$ ]]; then
+      npm install -g pm2 || { err "pm2 install failed. Try with sudo, or use option 6 (foreground)."; return 1; }
+    else return 1; fi
+  fi
+  if pm2_running; then
+    log "Already running — restarting..."
+    pm2 restart whatsapp-claude-bot
+  else
+    pm2 start ecosystem.config.cjs
+  fi
+  pm2 save >/dev/null 2>&1 || true
+  ok "Bot is running under pm2."
+  log "First run? Tail logs to see the QR: ${BOLD}./encryptoai logs${RESET}"
+  log "Make it survive reboot: run ${BOLD}pm2 startup${RESET} and follow its instructions."
+}
+
+do_stop() {
+  if pm2_running; then pm2 stop whatsapp-claude-bot; ok "Stopped"
+  else warn "Not running under pm2."; fi
+}
+
+do_logs() {
+  if pm2_running; then log "Tailing pm2 logs (Ctrl+C to exit)..."; pm2 logs whatsapp-claude-bot
+  else warn "Bot isn't running under pm2."; fi
+}
+
+# ─── first-run wizard ─────────────────────────────────────────────────────────
+first_run() {
+  banner
+  printf '  %sFirst-time setup%s — I will walk you through everything.\n\n' "$BOLD" "$RESET"
+  do_install || exit 1
+  do_env_setup
+  if have claude && ! claude_logged_in; then
+    ask "Log in to Claude Code now? [Y/n]"
+    [[ ! "${REPLY:-}" =~ ^[Nn]$ ]] && do_claude_login || true
+  fi
+  if ! is_paired; then
+    ask "Pair WhatsApp now (scan QR)? [Y/n]"
+    [[ ! "${REPLY:-}" =~ ^[Nn]$ ]] && do_relink || true
+  fi
+  if [ "$(allow_count)" -eq 0 ] && is_paired; then
+    ask "Discover your JID and add it to the allowlist now? [Y/n]"
+    [[ ! "${REPLY:-}" =~ ^[Nn]$ ]] && do_find_jid || true
+  fi
+  echo
+  ok "Setup complete."
+  ask "Open the menu? [Y/n]"
+  [[ "${REPLY:-}" =~ ^[Nn]$ ]] && exit 0
+  menu
+}
+
+# ─── interactive menu ─────────────────────────────────────────────────────────
+menu() {
+  while true; do
+    print_status
+    printf '  %sWhat do you want to do?%s\n' "$BOLD" "$RESET"
+    cat <<EOF
+    1) Install / update npm dependencies
+    2) Log in to Claude Code
+    3) Link / re-link WhatsApp (scan QR)
+    4) Find my JID and add to allowlist
+    5) Edit .env (allowlist, work dir, log level)
+    6) Start bot in foreground
+    7) Start bot as daemon (pm2, always-on)
+    8) Stop pm2 daemon
+    9) Tail pm2 logs
+    0) Quit
+EOF
+    echo
+    ask "Choose:"
+    case "${REPLY:-}" in
+      1) do_install ;;
+      2) do_claude_login ;;
+      3) do_relink ;;
+      4) do_find_jid ;;
+      5) do_edit_env ;;
+      6) do_start_fg ;;
+      7) do_start_daemon ;;
+      8) do_stop ;;
+      9) do_logs ;;
+      0|q|quit|exit) ok "Bye"; exit 0 ;;
+      *) err "Unknown option: ${REPLY:-}" ;;
+    esac
+    echo
+    ask "Press Enter to continue..."
+  done
+}
+
+usage() {
+  cat <<EOF
+Usage: ./encryptoai [command]
+
+Commands:
+  setup        Run the first-time wizard end-to-end
+  install      Install / update npm dependencies
+  login        Log in to Claude Code
+  link         Pair / re-pair WhatsApp (scan QR)
+  relink       Alias for: link
+  jid          Find your JID by sending a WhatsApp message, auto-add it
+  allow <JID>  Add a JID to ALLOWED_JIDS in .env
+  edit         Open .env in \$EDITOR
+  soul         Edit soul.md (persona / voice)
+  rules        Edit rules.md (hard rules)
+  cron ...     Manage scheduled jobs (see: cron help)
+  start        Run bot in foreground (Ctrl+C to stop)
+  daemon       Run bot under pm2 (always-on)
+  stop         Stop pm2 daemon
+  logs         Tail pm2 logs
+  status       Print current status
+  help         Show this message
+
+Run with no arguments for an interactive menu.
+EOF
+}
+
+# ─── dispatch ─────────────────────────────────────────────────────────────────
+case "${1:-}" in
+  setup)         first_run ;;
+  install)       do_install ;;
+  login)         do_claude_login ;;
+  link|relink)   do_relink ;;
+  jid|find-jid)  do_find_jid ;;
+  allow)         shift; add_jid "${1:-}" ;;
+  edit)          do_edit_env ;;
+  soul)          do_edit_soul ;;
+  rules)         do_edit_rules ;;
+  cron)          shift; do_cron "$@" ;;
+  start|fg)      do_start_fg ;;
+  daemon|up)     do_start_daemon ;;
+  stop|down)     do_stop ;;
+  logs)          do_logs ;;
+  status)        print_status ;;
+  help|-h|--help) usage ;;
+  "")
+    if ! has_deps || ! has_env; then first_run
+    else menu; fi
+    ;;
+  *) err "Unknown command: $1"; usage; exit 1 ;;
+esac
